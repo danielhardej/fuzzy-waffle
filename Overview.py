@@ -45,12 +45,14 @@ if len(selected_dates) != 2 or not selected_regions:
     footer()
     st.stop()
 
+# Filter the observations based on the selected regions and date rang
 filtered = filter_observations(daily, selected_regions, selected_dates[0], selected_dates[1])
 if filtered.empty:
     st.info("No observations match those filters. Try a wider date range or another region.")
     footer()
     st.stop()
 
+# Calculate and display key performance indicators (KPIs) for the filtered data
 kpis = overview_kpis(filtered, config.thresholds.frost_c)
 columns = st.columns(4)
 columns[0].metric("Total rainfall", f"{kpis.total_rainfall:,.0f} mm")
