@@ -40,12 +40,49 @@ def test_temperature_and_station_charts_use_metric_colors() -> None:
     )
 
     trend = temperature_trend_chart(data)
-    station = station_weather_chart(data)
+    station = station_weather_chart(data, frost_c=2.0, heat_c=35.0)
 
     assert trend.data[0].line.color == COLORS["max_temp"]
     assert trend.data[1].line.color == COLORS["min_temp"]
     assert station.data[0].marker.color == COLORS["rain"]
     assert station.layout.yaxis2.title.text == "Temperature (°C)"
+
+
+def test_station_weather_chart_marks_heat_and_frost_events() -> None:
+    data = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]),
+            "rainfall_mm": [0.0, 1.0, 2.0, 3.0],
+            "max_temp_c": [35.0, 34.9, None, 40.0],
+            "min_temp_c": [2.0, 1.9, -1.0, None],
+        }
+    )
+
+    figure = station_weather_chart(data, frost_c=2.0, heat_c=35.0)
+
+    assert [trace.name for trace in figure.data] == [
+        "Rainfall",
+        "Max temperature",
+        "Min temperature",
+        "Heat day",
+        "Frost night",
+    ]
+    assert list(figure.data[0].y) == [0.0, 1.0, 2.0, 3.0]
+    assert list(figure.data[1].y[:2]) == [35.0, 34.9]
+    assert pd.isna(figure.data[1].y[2])
+    assert figure.data[1].y[3] == 40.0
+    assert list(figure.data[2].y[:3]) == [2.0, 1.9, -1.0]
+    assert pd.isna(figure.data[2].y[3])
+    assert list(figure.data[3].y) == [35.0, 40.0]
+    assert list(figure.data[4].y) == [1.9, -1.0]
+    assert figure.data[3].marker.color == COLORS["heat"]
+    assert figure.data[4].marker.color == COLORS["frost"]
+    assert "Date:" in figure.data[3].hovertemplate
+    assert "Temperature:" in figure.data[3].hovertemplate
+    assert "Event: Heat day" in figure.data[3].hovertemplate
+    assert "Date:" in figure.data[4].hovertemplate
+    assert "Temperature:" in figure.data[4].hovertemplate
+    assert "Event: Frost night" in figure.data[4].hovertemplate
 
 
 def test_gdd_and_map_have_expected_trace_types_and_sizing() -> None:

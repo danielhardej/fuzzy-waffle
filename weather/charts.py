@@ -8,6 +8,8 @@ COLORS = {
     "rain": "#58A6FF",
     "max_temp": "#F85149",
     "min_temp": "#79C0FF",
+    "heat": "#D29922",
+    "frost": "#BC8CFF",
     "gdd": "#3FB950",
     "accent": "#8250DF",
     "text": "#E6EDF3",
@@ -85,8 +87,8 @@ def station_map_chart(df: pd.DataFrame) -> go.Figure:
     return _style(figure, height=500)
 
 
-def station_weather_chart(df: pd.DataFrame) -> go.Figure:
-    """Build rainfall bars with maximum and minimum temperature lines."""
+def station_weather_chart(df: pd.DataFrame, frost_c: float, heat_c: float) -> go.Figure:
+    """Build rainfall, temperature, heat-day, and frost-night traces."""
     figure = make_subplots(specs=[[{"secondary_y": True}]])
     figure.add_bar(
         x=df["date"], y=df["rainfall_mm"], name="Rainfall", marker_color=COLORS["rain"]
@@ -103,6 +105,26 @@ def station_weather_chart(df: pd.DataFrame) -> go.Figure:
         y=df["min_temp_c"],
         name="Min temperature",
         line={"color": COLORS["min_temp"], "width": 2},
+        secondary_y=True,
+    )
+    heat_days = df.loc[df["max_temp_c"].notna() & df["max_temp_c"].ge(heat_c)]
+    figure.add_scatter(
+        x=heat_days["date"],
+        y=heat_days["max_temp_c"],
+        name="Heat day",
+        mode="markers",
+        marker={"color": COLORS["heat"], "symbol": "triangle-up", "size": 10},
+        hovertemplate="Date: %{x|%d %b %Y}<br>Temperature: %{y:.1f} °C<br>Event: Heat day<extra></extra>",
+        secondary_y=True,
+    )
+    frost_nights = df.loc[df["min_temp_c"].notna() & df["min_temp_c"].lt(frost_c)]
+    figure.add_scatter(
+        x=frost_nights["date"],
+        y=frost_nights["min_temp_c"],
+        name="Frost night",
+        mode="markers",
+        marker={"color": COLORS["frost"], "symbol": "triangle-down", "size": 10},
+        hovertemplate="Date: %{x|%d %b %Y}<br>Temperature: %{y:.1f} °C<br>Event: Frost night<extra></extra>",
         secondary_y=True,
     )
     figure.update_yaxes(title="Rainfall (mm)", secondary_y=False)

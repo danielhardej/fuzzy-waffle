@@ -45,7 +45,12 @@ st.caption(
 )
 
 st.subheader("Daily weather")
-st.plotly_chart(station_weather_chart(station_daily), use_container_width=True)
+st.plotly_chart(
+    station_weather_chart(
+        station_daily, frost_c=config.thresholds.frost_c, heat_c=config.thresholds.heat_c
+    ),
+    use_container_width=True,
+)
 
 st.subheader("Cumulative growing degree days")
 gdd = calc_gdd(station_daily, config.thresholds.gdd_base_c)
