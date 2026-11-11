@@ -1,5 +1,6 @@
 """Plotly figure builders with a shared visual language."""
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -55,6 +56,77 @@ def temperature_trend_chart(df: pd.DataFrame) -> go.Figure:
     )
     figure.update_yaxes(title="Temperature (°C)")
     return _style(figure)
+
+
+def rainfall_heatmap_chart(matrix: pd.DataFrame) -> go.Figure:
+    """Build a station-by-period rainfall heatmap; periods without data stay blank."""
+    figure = go.Figure(
+        go.Heatmap(
+            z=matrix.to_numpy(),
+            x=matrix.columns,
+            y=matrix.index,
+            colorscale=[[0, "#161B22"], [1, COLORS["rain"]]],
+            colorbar={"title": "mm"},
+            hoverongaps=False,
+            xgap=2,
+            ygap=2,
+            hovertemplate="<b>%{y}</b><br>%{x|%d %b %Y}<br>%{z:.1f} mm<extra></extra>",
+        )
+    )
+    figure.update_yaxes(autorange="reversed")
+    _style(figure, height=max(260, 70 + 44 * len(matrix.index)))
+    figure.update_layout(hovermode="closest")
+    return figure
+
+
+def cumulative_rainfall_chart(df: pd.DataFrame) -> go.Figure:
+    """Build one cumulative rainfall line per station."""
+    figure = go.Figure()
+    for station in df["station"].drop_duplicates():
+        station_data = df[df["station"] == station]
+        figure.add_scatter(
+            x=station_data["date"], y=station_data["cumulative_mm"], name=station, mode="lines"
+        )
+    figure.update_layout(colorway=[COLORS["rain"], COLORS["accent"], COLORS["heat"], COLORS["gdd"]])
+    figure.update_yaxes(title="Cumulative rainfall (mm)")
+    return _style(figure)
+
+
+def rain_calendar_chart(grid: pd.DataFrame) -> go.Figure:
+    """Build a station-by-day strip showing wet, dry and missing days."""
+    states = {0: ("Missing", COLORS["heat"]), 1: ("Dry", "#21262D"), 2: ("Wet", COLORS["rain"])}
+    codes = grid.fillna(-1).to_numpy() + 1
+    labels = np.vectorize(lambda code: states[int(code)][0])(codes)
+    colorscale = [
+        [0, states[0][1]], [1 / 3, states[0][1]],
+        [1 / 3, states[1][1]], [2 / 3, states[1][1]],
+        [2 / 3, states[2][1]], [1, states[2][1]],
+    ]
+    figure = go.Figure(
+        go.Heatmap(
+            z=codes,
+            x=grid.columns,
+            y=grid.index,
+            zmin=0,
+            zmax=2,
+            colorscale=colorscale,
+            showscale=False,
+            customdata=labels,
+            hovertemplate="<b>%{y}</b><br>%{x|%d %b %Y}<br>%{customdata}<extra></extra>",
+        )
+    )
+    for label, color in states.values():
+        figure.add_scatter(
+            x=[None],
+            y=[None],
+            mode="markers",
+            name=label,
+            marker={"symbol": "square", "size": 10, "color": color},
+        )
+    figure.update_yaxes(autorange="reversed")
+    _style(figure, height=max(200, 90 + 36 * len(grid.index)))
+    figure.update_layout(hovermode="closest")
+    return figure
 
 
 def station_map_chart(df: pd.DataFrame) -> go.Figure:

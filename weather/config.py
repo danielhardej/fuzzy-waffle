@@ -22,11 +22,12 @@ class Paths:
 
 @dataclass(frozen=True)
 class Thresholds:
-    """Weather thresholds in degrees Celsius."""
+    """Weather thresholds: temperatures in degrees Celsius, wet_day_mm in millimetres."""
 
     frost_c: float
     heat_c: float
     gdd_base_c: float
+    wet_day_mm: float
 
 
 @dataclass(frozen=True)

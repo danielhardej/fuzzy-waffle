@@ -62,6 +62,7 @@ and are intentionally excluded from Git.
 .
 ├── Overview.py                    # Overview page
 ├── pages/1_Station_detail.py      # Station analysis page
+├── pages/2_Rainfall_explorer.py   # Cross-station rainfall comparison page
 ├── weather/                       # Data, metrics, charts and app logic
 ├── scripts/generate_data.py       # Deterministic synthetic data generator
 ├── legacy/station_rankings.R      # Base-R monthly station ranking

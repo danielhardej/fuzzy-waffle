@@ -4,12 +4,59 @@ import pandas as pd
 
 from weather.charts import (
     COLORS,
+    cumulative_rainfall_chart,
     gdd_chart,
     monthly_rainfall_chart,
+    rain_calendar_chart,
+    rainfall_heatmap_chart,
     station_map_chart,
     station_weather_chart,
     temperature_trend_chart,
 )
+
+
+def test_rainfall_heatmap_keeps_missing_periods_blank() -> None:
+    matrix = pd.DataFrame(
+        [[10.0, None], [0.0, 4.0]],
+        index=pd.Index(["Albany", "Moora"], name="station"),
+        columns=pd.to_datetime(["2024-01-01", "2024-02-01"]),
+    )
+
+    figure = rainfall_heatmap_chart(matrix)
+
+    assert figure.data[0].type == "heatmap"
+    assert pd.isna(figure.data[0].z[0][1])
+    assert figure.data[0].colorscale[-1][1] == COLORS["rain"]
+    assert figure.layout.paper_bgcolor == "rgba(0,0,0,0)"
+
+
+def test_cumulative_rainfall_chart_has_one_line_per_station() -> None:
+    data = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02"] * 2),
+            "station": ["Albany", "Albany", "Moora", "Moora"],
+            "cumulative_mm": [1.0, 3.0, 0.0, 0.0],
+        }
+    )
+
+    figure = cumulative_rainfall_chart(data)
+
+    assert [trace.name for trace in figure.data] == ["Albany", "Moora"]
+    assert figure.layout.yaxis.title.text == "Cumulative rainfall (mm)"
+
+
+def test_rain_calendar_chart_encodes_missing_dry_and_wet_days() -> None:
+    grid = pd.DataFrame(
+        [[1.0, 0.0, None]],
+        index=pd.Index(["Albany"], name="station"),
+        columns=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+    )
+
+    figure = rain_calendar_chart(grid)
+
+    assert list(figure.data[0].z[0]) == [2.0, 1.0, 0.0]
+    assert list(figure.data[0].customdata[0]) == ["Wet", "Dry", "Missing"]
+    assert [trace.name for trace in figure.data[1:]] == ["Missing", "Dry", "Wet"]
 
 
 def test_monthly_rainfall_uses_shared_transparent_layout() -> None:

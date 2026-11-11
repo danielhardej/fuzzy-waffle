@@ -5,7 +5,9 @@ from datetime import date
 
 import pandas as pd
 
-from weather.metrics import frost_nights, heat_days, monthly_rainfall
+from weather.metrics import frost_nights, heat_days, longest_dry_spell, monthly_rainfall, wet_days
+
+DEFAULT_STATION_LIMIT = 6
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,18 @@ class OverviewKpis:
     wettest_station: str
     hottest_day: str
     frost_nights: int
+
+
+@dataclass(frozen=True)
+class RainfallKpis:
+    """Headline values for the rainfall explorer page."""
+
+    total_rainfall: float
+    wettest_station: str
+    driest_station: str
+    wet_days: int
+    dry_spell_days: int
+    dry_spell_station: str
 
 
 def filter_observations(
@@ -82,3 +96,107 @@ def station_monthly_summary(
             }
         )
     return pd.DataFrame(rows)
+
+
+def default_stations(df: pd.DataFrame) -> list[str]:
+    """Pick the first station alphabetically in each region, up to a small limit."""
+    pairs = df[["region", "station"]].drop_duplicates().sort_values(["region", "station"])
+    return pairs.drop_duplicates("region")["station"].head(DEFAULT_STATION_LIMIT).tolist()
+
+
+def filter_stations(df: pd.DataFrame, stations: list[str]) -> pd.DataFrame:
+    """Keep observations for the selected station names."""
+    return df[df["station"].isin(stations)].copy()
+
+
+def rainfall_kpis(df: pd.DataFrame, wet_threshold_mm: float) -> RainfallKpis:
+    """Calculate the rainfall explorer headline values."""
+    totals = df.groupby("station")["rainfall_mm"].sum(min_count=1).dropna()
+    spells = {
+        str(station): longest_dry_spell(group, wet_threshold_mm)
+        for station, group in df.groupby("station")
+    }
+    spell_station = max(spells, key=lambda name: spells[name]) if spells else None
+    return RainfallKpis(
+        total_rainfall=float(df["rainfall_mm"].sum()),
+        wettest_station=str(totals.idxmax()) if not totals.empty else "Not available",
+        driest_station=str(totals.idxmin()) if not totals.empty else "Not available",
+        wet_days=wet_days(df, wet_threshold_mm),
+        dry_spell_days=spells[spell_station] if spell_station else 0,
+        dry_spell_station=spell_station or "Not available",
+    )
+
+
+def rainfall_matrix(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Return rainfall by station (rows) and week or month (columns), wettest station first.
+
+    Periods with no valid observations stay NaN rather than becoming zero.
+    """
+    period = df["date"].dt.to_period("W-SUN" if freq == "W" else "M").dt.start_time
+    matrix = (
+        df.assign(period=period)
+        .groupby(["station", "period"])["rainfall_mm"]
+        .sum(min_count=1)
+        .unstack("period")
+    )
+    order = matrix.sum(axis=1).sort_values(ascending=False, kind="stable").index
+    return matrix.loc[order]
+
+
+def cumulative_rainfall(df: pd.DataFrame) -> pd.DataFrame:
+    """Return running rainfall totals per station across the full date span.
+
+    Missing readings add nothing, so the total stays flat across them.
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["date", "station", "cumulative_mm"])
+    span = pd.date_range(df["date"].min(), df["date"].max(), freq="D")
+    frames = []
+    for station, group in df.groupby("station"):
+        daily = group.set_index("date")["rainfall_mm"].reindex(span).fillna(0)
+        frames.append(
+            pd.DataFrame(
+                {"date": span, "station": station, "cumulative_mm": daily.cumsum().to_numpy()}
+            )
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
+def rainfall_comparison(df: pd.DataFrame, wet_threshold_mm: float) -> pd.DataFrame:
+    """Summarise rainfall per station, including how much of the period has data."""
+    if df.empty:
+        return pd.DataFrame()
+    days_in_range = (df["date"].max() - df["date"].min()).days + 1
+    rows: list[dict[str, object]] = []
+    for station, group in df.groupby("station"):
+        valid = int(group["rainfall_mm"].notna().sum())
+        wet = wet_days(group, wet_threshold_mm)
+        rows.append(
+            {
+                "Station": station,
+                "Region": group["region"].iloc[0],
+                "Total (mm)": group["rainfall_mm"].sum(min_count=1),
+                "Wet days": wet,
+                "Wet-day rate (%)": wet / valid * 100 if valid else float("nan"),
+                "Heaviest day (mm)": group["rainfall_mm"].max(),
+                "Longest dry spell (days)": longest_dry_spell(group, wet_threshold_mm),
+                "Data coverage (%)": valid / days_in_range * 100,
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values("Total (mm)", ascending=False, na_position="last", kind="stable")
+        .reset_index(drop=True)
+    )
+
+
+def rain_calendar(df: pd.DataFrame, wet_threshold_mm: float) -> pd.DataFrame:
+    """Return a station-by-date grid: 1 for wet days, 0 for dry days, NaN when missing."""
+    rainfall = (
+        df.groupby(["station", "date"])["rainfall_mm"].sum(min_count=1).unstack("date").sort_index()
+    )
+    if rainfall.empty:
+        return rainfall
+    span = pd.date_range(df["date"].min(), df["date"].max(), freq="D")
+    rainfall = rainfall.reindex(columns=span)
+    return rainfall.ge(wet_threshold_mm).astype(float).where(rainfall.notna())
