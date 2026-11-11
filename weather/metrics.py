@@ -37,6 +37,30 @@ def heat_days(df: pd.DataFrame, threshold_c: float) -> int:
     return int(df["max_temp_c"].ge(threshold_c).sum())
 
 
+def wet_days(df: pd.DataFrame, threshold_mm: float) -> int:
+    """Count days with rainfall at or above the wet-day threshold."""
+    return int(df["rainfall_mm"].ge(threshold_mm).sum())
+
+
+def longest_dry_spell(df: pd.DataFrame, threshold_mm: float) -> int:
+    """Return the longest run of consecutive dry days for one station.
+
+    A missing reading or a gap in dates ends the run, so the result is a lower bound.
+    """
+    longest = current = 0
+    previous_date = None
+    for date, rainfall in df.sort_values("date")[["date", "rainfall_mm"]].itertuples(index=False):
+        is_dry = pd.notna(rainfall) and rainfall < threshold_mm
+        contiguous = previous_date is not None and date - previous_date == pd.Timedelta(days=1)
+        if is_dry:
+            current = current + 1 if contiguous else 1
+            longest = max(longest, current)
+        else:
+            current = 0
+        previous_date = date
+    return longest
+
+
 def monthly_rainfall(df: pd.DataFrame, group_by: str) -> pd.DataFrame:
     """Aggregate valid rainfall observations by month and one category."""
     monthly = df.assign(month=df["date"].dt.to_period("M").dt.to_timestamp())
