@@ -36,6 +36,16 @@ ruff check .
 pytest
 ```
 
+Generate a Markdown rainfall report for the latest complete month in the data, or choose
+a month explicitly:
+
+```powershell
+python scripts/monthly_report.py
+python scripts/monthly_report.py --month 2024-12
+```
+
+Reports are written to `reports/<YYYY-MM>.md`.
+
 ### macOS and Linux
 
 ```bash
@@ -53,6 +63,8 @@ ruff check .
 pytest
 ```
 
+Generate a monthly rainfall report with the same commands shown above.
+
 The app opens at `http://localhost:8501`. Generated CSV files are written to `data/`
 and are intentionally excluded from Git.
 
@@ -65,6 +77,7 @@ and are intentionally excluded from Git.
 ├── pages/2_Rainfall_explorer.py   # Cross-station rainfall comparison page
 ├── weather/                       # Data, metrics, charts and app logic
 ├── scripts/generate_data.py       # Deterministic synthetic data generator
+├── scripts/monthly_report.py      # Monthly Markdown rainfall reports
 ├── legacy/station_rankings.R      # Base-R monthly station ranking
 ├── tests/                         # Metrics, charts and app smoke tests
 ├── config.yaml                    # Paths and weather thresholds
