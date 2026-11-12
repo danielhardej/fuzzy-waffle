@@ -83,10 +83,11 @@ def calculate_monthly_report(observations: pd.DataFrame, month: pd.Period) -> Mo
 
     selected_totals = selected.groupby("station")["rainfall_mm"].sum(min_count=1)
     valid_totals = selected_totals.dropna()
-    wettest_total = valid_totals.max()
-    driest_total = valid_totals.min()
-    wettest_stations = tuple(sorted(valid_totals[valid_totals.eq(wettest_total)].index))
-    driest_stations = tuple(sorted(valid_totals[valid_totals.eq(driest_total)].index))
+    ranked_totals = valid_totals.round(1)
+    wettest_total = ranked_totals.max()
+    driest_total = ranked_totals.min()
+    wettest_stations = tuple(sorted(ranked_totals[ranked_totals.eq(wettest_total)].index))
+    driest_stations = tuple(sorted(ranked_totals[ranked_totals.eq(driest_total)].index))
 
     historical = observations.loc[
         observations["date"].dt.month.eq(month.month)

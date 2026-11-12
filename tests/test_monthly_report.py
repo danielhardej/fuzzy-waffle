@@ -69,6 +69,22 @@ def test_report_calculates_region_totals_and_all_extreme_ties() -> None:
     assert report.driest_stations == ("Beta", "Gamma")
 
 
+def test_report_compares_extremes_at_tenth_of_a_millimetre_precision() -> None:
+    observations = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-01"]),
+            "station": ["Alpha", "Alpha", "Beta"],
+            "region": ["North", "North", "South"],
+            "rainfall_mm": [0.1, 0.2, 0.3],
+        }
+    )
+
+    report = calculate_monthly_report(observations, pd.Period("2024-01", freq="M"))
+
+    assert report.wettest_stations == ("Alpha", "Beta")
+    assert report.driest_stations == ("Alpha", "Beta")
+
+
 def test_report_compares_station_totals_with_other_year_average() -> None:
     report = calculate_monthly_report(_observations(), pd.Period("2024-01", freq="M"))
     comparisons = report.station_comparisons.set_index("station")
