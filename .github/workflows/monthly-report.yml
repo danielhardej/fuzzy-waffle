@@ -1,0 +1,138 @@
+name: Monthly rainfall report
+
+on:
+  schedule:
+    # 00:00 UTC is 08:00 Australian Western Standard Time.
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+    inputs:
+      month:
+        description: Report month in YYYY-MM format (defaults to the latest complete month)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  report:
+    name: Generate monthly rainfall report
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Generate synthetic data
+        run: python scripts/generate_data.py --interval-minutes 60
+
+      - name: Run tests
+        run: pytest
+
+      - name: Generate report
+        id: report
+        env:
+          REQUESTED_MONTH: ${{ inputs.month || '' }}
+        shell: bash
+        run: |
+          arguments=()
+          if [[ -n "$REQUESTED_MONTH" ]]; then
+            arguments=(--month "$REQUESTED_MONTH")
+          fi
+
+          output=$(python scripts/monthly_report.py "${arguments[@]}")
+          echo "$output"
+          written_path=$(printf '%s\n' "$output" | sed -n 's/^Wrote //p' | tail -n 1)
+          if [[ -z "$written_path" || ! -f "$written_path" ]]; then
+            echo "The report script did not produce a report file." >&2
+            exit 1
+          fi
+
+          month=$(basename "$written_path" .md)
+          if [[ ! "$month" =~ ^[0-9]{4}-(0[1-9]|1[0-2])$ ]]; then
+            echo "The report script produced an invalid month: $month" >&2
+            exit 1
+          fi
+
+          generated_path="$RUNNER_TEMP/monthly-report-$month.md"
+          cp "$written_path" "$generated_path"
+          echo "month=$month" >> "$GITHUB_OUTPUT"
+          echo "path=reports/$month.md" >> "$GITHUB_OUTPUT"
+          echo "generated_path=$generated_path" >> "$GITHUB_OUTPUT"
+
+      - name: Commit report
+        id: commit
+        env:
+          GENERATED_PATH: ${{ steps.report.outputs.generated_path }}
+          REPORT_MONTH: ${{ steps.report.outputs.month }}
+          REPORT_PATH: ${{ steps.report.outputs.path }}
+        shell: bash
+        run: |
+          branch="report/$REPORT_MONTH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            git switch -C "$branch" "origin/$branch"
+          else
+            git switch -c "$branch"
+          fi
+
+          mkdir -p "$(dirname "$REPORT_PATH")"
+          cp "$GENERATED_PATH" "$REPORT_PATH"
+          git add -f -- "$REPORT_PATH"
+
+          if git diff --cached --quiet; then
+            echo "The report has not changed; no commit or pull request is needed."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "docs(report): add monthly rainfall report $REPORT_MONTH"
+          git push --set-upstream origin "$branch"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          REPORT_BRANCH: ${{ steps.commit.outputs.branch }}
+          REPORT_MONTH: ${{ steps.report.outputs.month }}
+        shell: bash
+        run: |
+          pull_request_url=$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head "$REPORT_BRANCH" \
+              --state open \
+              --json url \
+              --jq '.[0].url'
+          )
+          if [[ -n "$pull_request_url" ]]; then
+            echo "Pull request already open: $pull_request_url"
+            exit 0
+          fi
+
+          body=$(printf 'Automated monthly rainfall report for `%s`.\n\nValidation: `pytest`.' "$REPORT_MONTH")
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$REPORT_BRANCH" \
+            --title "Monthly rainfall report $REPORT_MONTH" \
+            --body "$body"
