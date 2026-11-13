@@ -86,9 +86,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$branch_name"
           git add "$REPORT_PATH"
-          git commit -m "$title"
-          git push --force-with-lease --set-upstream origin "$branch_name"
-
           existing_pr="$(
             gh pr list \
               --repo "$GITHUB_REPOSITORY" \
@@ -98,6 +95,15 @@ jobs:
               --json number \
               --jq '.[0].number'
           )"
+
+          if [[ -n "$existing_pr" ]] &&
+             git rev-parse --verify --quiet "refs/remotes/origin/$branch_name" >/dev/null &&
+             git diff --cached --quiet "refs/remotes/origin/$branch_name" -- "$REPORT_PATH"; then
+            echo "Report content is unchanged on $branch_name; skipping commit and push."
+          else
+            git commit -m "$title"
+            git push --force-with-lease --set-upstream origin "$branch_name"
+          fi
 
           if [[ -z "$existing_pr" ]]; then
             gh pr create \
