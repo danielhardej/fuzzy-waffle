@@ -1,0 +1,61 @@
+name: Publish rainfall reports
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - reports/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy reports to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Build report index
+        shell: bash
+        run: |
+          {
+            echo '<!doctype html>'
+            echo '<html lang="en"><head><meta charset="utf-8">'
+            echo '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            echo '<title>Monthly rainfall reports</title></head><body>'
+            echo '<main><h1>Monthly rainfall reports</h1><ul>'
+            while IFS= read -r report; do
+              filename="$(basename "$report")"
+              month="${filename%.md}"
+              printf '<li><a href="%s">%s</a></li>\n' "$filename" "$month"
+            done < <(find reports -maxdepth 1 -type f -name '*.md' | sort -r)
+            echo '</ul></main></body></html>'
+          } > reports/index.html
+
+      - name: Upload reports
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
